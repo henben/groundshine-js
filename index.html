@@ -30,6 +30,8 @@
     <canvas id="gameCanvas" tabindex="0"></canvas>
     <div id="messageBox" class="message-box"></div>
     <audio id="missileBoostSound" src="missile_boost.wav" preload="auto"></audio>
+    <audio id="playerExplosionSound" src="player_explosion.wav" preload="auto"></audio>
+    <audio id="enemyExplosionSound" src="enemy_explosion.wav" preload="auto"></audio>
 
     <script>
         // Get canvas and context
@@ -39,6 +41,8 @@
         // DOM Element for messages
         const messageBox = document.getElementById('messageBox');
         const missileBoostSound = document.getElementById('missileBoostSound');
+        const playerExplosionSound = document.getElementById('playerExplosionSound');
+        const enemyExplosionSound = document.getElementById('enemyExplosionSound');
 
         // Game constants
         const CANVAS_WIDTH = 800;
@@ -236,11 +240,16 @@
                 this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; 
                 screenFlashTimer = SCREEN_FLASH_DURATION; 
                 showMessage("KABOOM!", 1500);
-                // Ensure sound is stopped when exploding
+                // Ensure boost sound is stopped when exploding
                 if (missileBoostSound && !missileBoostSound.paused) {
                     missileBoostSound.pause();
                     missileBoostSound.currentTime = 0;
                     missileBoostSound.loop = false;
+                }
+                // Play player explosion sound
+                if (playerExplosionSound) {
+                    playerExplosionSound.currentTime = 0;
+                    playerExplosionSound.play();
                 }
             }
         };
@@ -264,23 +273,25 @@
                     const thrustAy = Math.sin(this.angle) * LAUNCH_ACCEL;
                     this.vx += thrustAx;
                     this.vy += thrustAy;
-                    if (missileBoostSound.paused) {
+                    if (missileBoostSound && missileBoostSound.paused) {
                         missileBoostSound.play();
                     }
-                    missileBoostSound.loop = true;
+                    if (missileBoostSound) missileBoostSound.loop = true;
                 } else { // 'c' key released
-                    missileBoostSound.pause();
-                    if (missileBoostSound.currentTime > 0) { // Only reset if it actually played
-                         missileBoostSound.currentTime = 0;
+                    if (missileBoostSound) {
+                        missileBoostSound.pause();
+                        if (missileBoostSound.currentTime > 0) { // Only reset if it actually played
+                             missileBoostSound.currentTime = 0;
+                        }
+                        missileBoostSound.loop = false;
                     }
-                    missileBoostSound.loop = false;
                     this.state = MissileState.FLYING_FREE;
                     showMessage("Missile coasting. Gravity active.", 2000); 
                 }
                 createTrailSmokeParticle(this.x, this.y); 
             } else if (this.state === MissileState.FLYING_FREE) {
                 // Stop the sound if it was somehow still playing and we are in FLYING_FREE
-                if (!missileBoostSound.paused) {
+                if (missileBoostSound && !missileBoostSound.paused) {
                     missileBoostSound.pause();
                     if (missileBoostSound.currentTime > 0) {
                         missileBoostSound.currentTime = 0;
@@ -351,6 +362,10 @@
                     if (this.y >= BOMB_GROUND_DETONATION_Y) { // Use new constant
                         this.hasDetonated = true; // Mark that it has detonated
                         createMushroomCloud(this.x, CANVAS_HEIGHT - 10); // Mushroom cloud starts near bottom
+                        if (enemyExplosionSound) {
+                            enemyExplosionSound.currentTime = 0;
+                            enemyExplosionSound.play();
+                        }
                         screenFlashTimer = SCREEN_FLASH_DURATION * ENEMY_BOMB_FLASH_MULTIPLIER;
                         const loss = Math.floor(Math.random() * (MAX_POPULATION_LOSS - MIN_POPULATION_LOSS + 1)) + MIN_POPULATION_LOSS;
                         population -= loss;
@@ -375,7 +390,7 @@
             });
         }
         // (Copied spawnBomb draw method for brevity)
-        spawnBomb = function(x,y,dropY){bombs.push({x,y,vx:0,vy:0,radius:BOMB_RADIUS,color:BOMB_COLOR,parachuteDeployed:false,initialDropY:dropY,isDisabledByShockwave:false,parachuteTattered:false,hasDetonated:false,draw:function(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(Math.PI/2);ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,0,BOMB_LENGTH/2,BOMB_WIDTH/2,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-BOMB_LENGTH/2,0);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,BOMB_FIN_SIZE/1.5);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,-BOMB_FIN_SIZE/1.5);ctx.closePath();ctx.fill();ctx.restore();const pBY=this.y-BOMB_LENGTH/2-2;if(this.parachuteTattered){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1;const tW=PARACHUTE_WIDTH*TATTERED_PARACHUTE_WIDTH_FACTOR;const tH=PARACHUTE_HEIGHT*TATTERED_PARACHUTE_HEIGHT_FACTOR;ctx.beginPath();ctx.moveTo(this.x-tW/2,pBY);ctx.quadraticCurveTo(this.x-tW/4,pBY-tH*1.2,this.x,pBY-tH);ctx.quadraticCurveTo(this.x+tW/4,pBY-tH*0.8,this.x+tW/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-tW/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+tW/4,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}else if(this.parachuteDeployed){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/2,pBY);ctx.quadraticCurveTo(this.x,pBY-PARACHUTE_HEIGHT,this.x+PARACHUTE_WIDTH/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}ctx.lineWidth=1;},update:function(){if(this.hasDetonated)return;if(this.isDisabledByShockwave){this.vy+=GRAVITY;this.y+=this.vy;this.x+=this.vx;if(this.y>=CANVAS_HEIGHT-this.radius){this.hasDetonated=true;}return;}if(!this.parachuteDeployed&&(this.y-this.initialDropY)>=CANVAS_HEIGHT*PARACHUTE_DEPLOY_Y_FALL_DISTANCE_FACTOR){this.parachuteDeployed=true;this.vy=PARACHUTE_FALL_SPEED;}if(this.parachuteDeployed){this.vy=PARACHUTE_FALL_SPEED;}else{this.vy+=GRAVITY;}this.y+=this.vy;this.x+=this.vx;if(this.y>=BOMB_GROUND_DETONATION_Y){this.hasDetonated=true;createMushroomCloud(this.x,CANVAS_HEIGHT-10);screenFlashTimer=SCREEN_FLASH_DURATION*ENEMY_BOMB_FLASH_MULTIPLIER;const loss=Math.floor(Math.random()*(MAX_POPULATION_LOSS-MIN_POPULATION_LOSS+1))+MIN_POPULATION_LOSS;population-=loss;if(population<0)population=0;for(let i=buildings.length-1;i>=0;i--){const bld=buildings[i];if(checkCollisionCircleRect({x:this.x,y:CANVAS_HEIGHT,radius:MAX_EXPLOSION_RADIUS},{x:bld.x,y:bld.y,width:bld.width,height:bld.height})){bld.health-=75;if(bld.health<0)bld.health=0;}}if(population===0&&!gameOver){gameOver=true;showMessage("CITY DESTROYED - GAME OVER",10000);}}}});};
+        spawnBomb = function(x,y,dropY){bombs.push({x,y,vx:0,vy:0,radius:BOMB_RADIUS,color:BOMB_COLOR,parachuteDeployed:false,initialDropY:dropY,isDisabledByShockwave:false,parachuteTattered:false,hasDetonated:false,draw:function(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(Math.PI/2);ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,0,BOMB_LENGTH/2,BOMB_WIDTH/2,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-BOMB_LENGTH/2,0);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,BOMB_FIN_SIZE/1.5);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,-BOMB_FIN_SIZE/1.5);ctx.closePath();ctx.fill();ctx.restore();const pBY=this.y-BOMB_LENGTH/2-2;if(this.parachuteTattered){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1;const tW=PARACHUTE_WIDTH*TATTERED_PARACHUTE_WIDTH_FACTOR;const tH=PARACHUTE_HEIGHT*TATTERED_PARACHUTE_HEIGHT_FACTOR;ctx.beginPath();ctx.moveTo(this.x-tW/2,pBY);ctx.quadraticCurveTo(this.x-tW/4,pBY-tH*1.2,this.x,pBY-tH);ctx.quadraticCurveTo(this.x+tW/4,pBY-tH*0.8,this.x+tW/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-tW/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+tW/4,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}else if(this.parachuteDeployed){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/2,pBY);ctx.quadraticCurveTo(this.x,pBY-PARACHUTE_HEIGHT,this.x+PARACHUTE_WIDTH/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}ctx.lineWidth=1;},update:function(){if(this.hasDetonated)return;if(this.isDisabledByShockwave){this.vy+=GRAVITY;this.y+=this.vy;this.x+=this.vx;if(this.y>=CANVAS_HEIGHT-this.radius){this.hasDetonated=true;}return;}if(!this.parachuteDeployed&&(this.y-this.initialDropY)>=CANVAS_HEIGHT*PARACHUTE_DEPLOY_Y_FALL_DISTANCE_FACTOR){this.parachuteDeployed=true;this.vy=PARACHUTE_FALL_SPEED;}if(this.parachuteDeployed){this.vy=PARACHUTE_FALL_SPEED;}else{this.vy+=GRAVITY;}this.y+=this.vy;this.x+=this.vx;if(this.y>=BOMB_GROUND_DETONATION_Y){this.hasDetonated=true;createMushroomCloud(this.x,CANVAS_HEIGHT-10);if(enemyExplosionSound){enemyExplosionSound.currentTime=0;enemyExplosionSound.play();}screenFlashTimer=SCREEN_FLASH_DURATION*ENEMY_BOMB_FLASH_MULTIPLIER;const loss=Math.floor(Math.random()*(MAX_POPULATION_LOSS-MIN_POPULATION_LOSS+1))+MIN_POPULATION_LOSS;population-=loss;if(population<0)population=0;for(let i=buildings.length-1;i>=0;i--){const bld=buildings[i];if(checkCollisionCircleRect({x:this.x,y:CANVAS_HEIGHT,radius:MAX_EXPLOSION_RADIUS},{x:bld.x,y:bld.y,width:bld.width,height:bld.height})){bld.health-=75;if(bld.health<0)bld.health=0;}}if(population===0&&!gameOver){gameOver=true;showMessage("CITY DESTROYED - GAME OVER",10000);}}}});};
 
         function updateBombs() { /* ... (same) ... */ }
         function drawBombs() { /* ... (same) ... */ }

@@ -111,16 +111,22 @@
         const GROUND_EXPLOSION_PARTICLE_COUNT = 40;
         const GROUND_EXPLOSION_LIFESPAN = 60;
         const GROUND_EXPLOSION_SPEED = 3;
-        const MUSHROOM_STEM_PARTICLE_COUNT = 50;
-        const MUSHROOM_STEM_LIFESPAN = 180; // MODIFIED: Increased stem lifespan
-        const MUSHROOM_STEM_RISE_SPEED = -1.2; 
-        const MUSHROOM_STEM_WIDTH = 20;
-        const MUSHROOM_CAP_PARTICLE_COUNT = 80;
-        const MUSHROOM_CAP_LIFESPAN = 250; // MODIFIED: Increased cap lifespan
-        const MUSHROOM_CAP_EXPAND_SPEED = 0.8;
-        const MUSHROOM_CAP_INITIAL_RADIUS = 5;
-        const MUSHROOM_CAP_MAX_RADIUS = 80;
-
+        const MUSHROOM_STEM_PARTICLE_COUNT = 20; // Further reduced number of cloud particles
+        const MUSHROOM_STEM_LIFESPAN = 1200; // 20 seconds
+        const MUSHROOM_STEM_RISE_SPEED = -2.4; // Reaches cap height in 1 second
+        const MUSHROOM_STEM_WIDTH = 8; // Keep narrow stem
+        const MUSHROOM_STEM_CLOUD_SIZE = 12; // Keep same size
+        const MUSHROOM_STEM_CLOUD_SPACING = 6; // Increased spacing for less density
+        const MUSHROOM_CAP_PARTICLE_COUNT = 120; // Increased for wider cap
+        const MUSHROOM_CAP_LIFESPAN = 1200; // 20 seconds
+        const MUSHROOM_CAP_EXPAND_SPEED = 1.2; // Increased expansion speed
+        const MUSHROOM_CAP_INITIAL_RADIUS = 10; // Increased initial radius
+        const MUSHROOM_CAP_MAX_RADIUS = 160; // Doubled max radius
+        const MUSHROOM_CAP_COLOR_PRIMARY = [50, 50, 50]; // Dark grey
+        const MUSHROOM_CAP_COLOR_SECONDARY = [20, 20, 20]; // Almost black
+        const MUSHROOM_STEM_COLOR = [60, 60, 60]; // Lighter grey for better visibility
+        const MUSHROOM_CAP_DELAY = 60; // 1 second delay before cap appears
+        const MUSHROOM_STEM_GROWTH_INTERVAL = 2; // Keep same growth interval
 
         // Enemy Constants
         const BOMBER_WIDTH = 30; 
@@ -135,6 +141,9 @@
         const BOMBER_SPAWN_MIN_Y_FACTOR = 0.1; 
         const BOMBER_SPAWN_MAX_Y_FACTOR = 0.5; 
         const BOMBER_CRASH_GRAVITY_FACTOR = 0.8; 
+        const BOMBER_MIN_DISTANCE_FOR_FIRST_BOMB = CANVAS_WIDTH / 2; // New constant for first bomb drop position
+        const BOMBER_MIN_TIME_BETWEEN_BOMBS = 120; // New constant for minimum time between bombs (2 seconds at 60fps)
+        let isFirstBomber = true; // New flag to track if this is the first bomber of the game
 
         const BOMB_RADIUS = 3; 
         const BOMB_LENGTH = BOMB_RADIUS * 2.5; 
@@ -152,7 +161,7 @@
         const BOMB_GROUND_DETONATION_Y = CANVAS_HEIGHT - 2; // MODIFIED: Detonates 2px from bottom
 
         // Population and Game Over
-        let population = 3000000;
+        let population = 0; // Will be calculated from building health
         const INITIAL_POPULATION = 3000000;
         const MIN_POPULATION_LOSS = 27000;
         const MAX_POPULATION_LOSS = 35000;
@@ -169,7 +178,19 @@
         const BUILDING_COLOR_DAMAGED_HIGH = '#554444'; // Darker Brownish Grey
         const BUILDING_COLOR_DESTROYED = '#333';   // Very Dark Grey
         const BUILDING_BASE_GAP = BASE_WIDTH * 2.5; // Gap around player base
+        const POPULATION_PER_HEALTH = 100; // Population per point of building health
+        const WINDOW_COLOR_LIT = '#FFEB3B'; // Yellow for lit windows
+        const WINDOW_COLOR_DARK = '#333'; // Dark for unlit windows
+        const CRACK_COLOR = '#222'; // Dark color for cracks
 
+        // Damage constants
+        const MISSILE_EXPLOSION_DAMAGE = 15; // Reduced from 30
+        const MISSILE_SHOCKWAVE_DAMAGE = 3; // Reduced from 10
+        const BOMB_GROUND_DAMAGE = 200; 
+        const DISABLED_BOMB_DAMAGE = 3; // New constant for disabled bomb impact
+        const CRASHED_BOMBER_DAMAGE = 10; // New constant for crashed bomber impact
+        const BOMB_DAMAGE_FALLOFF_RADIUS = 150; 
+        const BOMB_MIN_DAMAGE_PERCENT = 0.1; 
 
         // Canvas setup
         canvas.width = CANVAS_WIDTH;
@@ -214,34 +235,155 @@
         createEnemyDestructionPuff = function(x,y){for(let i=0;i<ENEMY_DESTRUCTION_PARTICLE_COUNT;i++){const a=Math.random()*Math.PI*2;const s=Math.random()*ENEMY_DESTRUCTION_PARTICLE_SPEED+0.5;const vx=Math.cos(a)*s;const vy=Math.sin(a)*s;const sz=Math.random()*3+1.5;const iC=Math.random()<0.6?[...ENEMY_DESTRUCTION_COLOR_PRIMARY]:[...ENEMY_DESTRUCTION_COLOR_SECONDARY];createParticle(x,y,vx,vy,sz,iC,ENEMY_DESTRUCTION_PARTICLE_LIFESPAN,'enemy_explosion',{initialColor:iC});}};
         
         function createMushroomCloud(x, impactY) {
+            // Create initial explosion effect
             for (let i = 0; i < GROUND_EXPLOSION_PARTICLE_COUNT; i++) {
-                const angle = Math.random() * Math.PI * 2; const speed = Math.random() * GROUND_EXPLOSION_SPEED;
-                const vx = Math.cos(angle) * speed; const vy = Math.sin(angle) * speed * 0.5 - Math.random()*1; 
-                const size = Math.random() * 5 + 2; const color = Math.random() < 0.7 ? [139,69,19] : [100,100,100]; 
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * GROUND_EXPLOSION_SPEED;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed * 0.5 - Math.random()*1;
+                const size = Math.random() * 5 + 2;
+                const color = Math.random() < 0.7 ? [255, 100, 0] : [255, 200, 0]; // Orange/yellow explosion
                 createParticle(x, impactY, vx, vy, size, color, GROUND_EXPLOSION_LIFESPAN, 'ground_burst');
             }
-            for (let i = 0; i < MUSHROOM_STEM_PARTICLE_COUNT; i++) {
-                const randX = (Math.random() - 0.5) * MUSHROOM_STEM_WIDTH; const vx = (Math.random() - 0.5) * 0.2;
-                const vy = MUSHROOM_STEM_RISE_SPEED * (0.8 + Math.random() * 0.4); const size = Math.random() * 8 + 4;
-                const color = [60,60,60]; 
-                setTimeout(() => { createParticle(x + randX, impactY, vx, vy, size, color, MUSHROOM_STEM_LIFESPAN, 'mushroom_stem', {expandRate: 0.05}); }, Math.random() * 500);
-            }
-             setTimeout(() => {
-                const capCenterY = impactY + MUSHROOM_STEM_RISE_SPEED * MUSHROOM_STEM_LIFESPAN * 0.3; 
-                for (let i = 0; i < MUSHROOM_CAP_PARTICLE_COUNT; i++) {
-                    const angle = Math.random() * Math.PI * 2; const distFromCenter = Math.random() * MUSHROOM_CAP_INITIAL_RADIUS;
-                    const startX = x + Math.cos(angle) * distFromCenter; const startY = capCenterY + Math.sin(angle) * distFromCenter * 0.5; 
-                    const vx = Math.cos(angle) * MUSHROOM_CAP_EXPAND_SPEED * (0.5 + Math.random()*0.5);
-                    const vy = Math.sin(angle) * MUSHROOM_CAP_EXPAND_SPEED * (0.5 + Math.random()*0.5) * 0.5 + MUSHROOM_STEM_RISE_SPEED*0.3; 
-                    const size = Math.random() * 10 + 8; const color = Math.random() < 0.4 ? [255,140,0] : (Math.random() < 0.7 ? [200,200,200] : [100,100,100]); 
-                    createParticle(startX, startY, vx, vy, size, color, MUSHROOM_CAP_LIFESPAN, 'mushroom_cap', {expandRate: 0.1, maxCapRadius: MUSHROOM_CAP_MAX_RADIUS * (0.5 + Math.random()*0.5)});
-                }
-            }, 800); // Increased delay for cap formation to allow stem to rise more
 
+            // Calculate final stem height and cap position
+            const finalStemHeight = Math.abs(MUSHROOM_STEM_RISE_SPEED * MUSHROOM_CAP_DELAY);
+            const capCenterY = impactY + MUSHROOM_STEM_RISE_SPEED * MUSHROOM_CAP_DELAY;
+            const numClouds = Math.ceil(finalStemHeight / MUSHROOM_STEM_CLOUD_SPACING);
+
+            // Create stem cloud particles
+            let currentCloud = 0;
+            const addStemCloud = () => {
+                if (currentCloud < numClouds) {
+                    // Calculate target height for this cloud
+                    const progress = currentCloud / numClouds;
+                    const targetY = impactY + (capCenterY - impactY) * progress;
+                    
+                    // Create a cluster of particles for each cloud
+                    for (let i = 0; i < 4; i++) { // Reduced to 4 particles per cloud
+                        const offsetX = (Math.random() - 0.5) * MUSHROOM_STEM_WIDTH;
+                        const offsetY = (Math.random() - 0.5) * MUSHROOM_STEM_CLOUD_SPACING;
+                        const vx = (Math.random() - 0.5) * 0.1; // Keep reduced horizontal drift
+                        const size = Math.random() * 4 + MUSHROOM_STEM_CLOUD_SIZE;
+                        const color = [...MUSHROOM_STEM_COLOR];
+                        createParticle(
+                            x + offsetX,
+                            targetY + offsetY,
+                            vx,
+                            0,
+                            size,
+                            color,
+                            MUSHROOM_STEM_LIFESPAN,
+                            'mushroom_stem',
+                            {
+                                expandRate: 0.05,
+                                initialY: targetY + offsetY
+                            }
+                        );
+                    }
+                    currentCloud++;
+                }
+            };
+
+            // Add initial cloud
+            addStemCloud();
+
+            // Set up interval to add new clouds
+            const growthInterval = setInterval(() => {
+                addStemCloud();
+                
+                // Stop adding clouds when we reach the top
+                if (currentCloud >= numClouds) {
+                    clearInterval(growthInterval);
+                    // Create mushroom cap only after stem is complete
+                    const capCenterY = impactY + MUSHROOM_STEM_RISE_SPEED * MUSHROOM_CAP_DELAY;
+                    for (let i = 0; i < MUSHROOM_CAP_PARTICLE_COUNT; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const distFromCenter = Math.random() * MUSHROOM_CAP_INITIAL_RADIUS;
+                        const startX = x + Math.cos(angle) * distFromCenter;
+                        const startY = capCenterY + Math.sin(angle) * distFromCenter * 0.5;
+                        const vx = Math.cos(angle) * MUSHROOM_CAP_EXPAND_SPEED * (0.5 + Math.random()*0.5);
+                        const vy = Math.sin(angle) * MUSHROOM_CAP_EXPAND_SPEED * (0.5 + Math.random()*0.5) * 0.5 + MUSHROOM_STEM_RISE_SPEED*0.3;
+                        const size = Math.random() * 12 + 10; // Increased particle size for cap
+                        const color = Math.random() < 0.7 ? [...MUSHROOM_CAP_COLOR_PRIMARY] : [...MUSHROOM_CAP_COLOR_SECONDARY];
+                        createParticle(startX, startY, vx, vy, size, color, MUSHROOM_CAP_LIFESPAN, 'mushroom_cap', {
+                            expandRate: 0.15, // Increased expansion rate
+                            maxCapRadius: MUSHROOM_CAP_MAX_RADIUS * (0.5 + Math.random()*0.5)
+                        });
+                    }
+                }
+            }, MUSHROOM_STEM_GROWTH_INTERVAL);
         }
 
-        updateParticles = function(){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life--;const lR=Math.max(0,p.life/p.initialLife);if(p.type==='launch_puff'){p.size=p.initialSize*lR;p.color=[lerp(LAUNCH_PUFF_COLOR_END[0],LAUNCH_PUFF_COLOR_START[0],lR),lerp(LAUNCH_PUFF_COLOR_END[1],LAUNCH_PUFF_COLOR_START[1],lR),lerp(LAUNCH_PUFF_COLOR_END[2],LAUNCH_PUFF_COLOR_START[2],lR)];}else if(p.type==='trail_smoke'){p.size=lerp(p.endRadius,p.initialSize,lR);p.color=[lerp(TRAIL_SMOKE_COLOR_END[0],TRAIL_SMOKE_COLOR_START[0],lR),lerp(TRAIL_SMOKE_COLOR_END[1],TRAIL_SMOKE_COLOR_START[1],lR),lerp(TRAIL_SMOKE_COLOR_END[2],TRAIL_SMOKE_COLOR_START[2],lR)];p.vx*=0.99;p.vy*=0.99;}else if(p.type==='enemy_explosion'){p.size=p.initialSize*lR*(1+(1-lR)*0.5);const c1=p.initialColor;const c2=[50,50,50];p.color=[lerp(c2[0],c1[0],lR),lerp(c2[1],c1[1],lR),lerp(c2[2],c1[2],lR)];p.vy+=GRAVITY*0.1;}else if(p.type==='ground_burst'){p.size=p.initialSize*lR;p.vy+=GRAVITY*0.2;}else if(p.type==='mushroom_stem'){p.size=Math.min(p.initialSize*(1+(1-lR)*p.expandRate*5), p.initialSize*2);p.vy*=0.98; p.vx*=0.98;}else if(p.type==='mushroom_cap'){p.size=Math.min(p.initialSize*(1+(1-lR)*p.expandRate*10),p.maxCapRadius*lR*1.5);p.vy*=0.95;p.vx*=0.95;}if(p.life<=0||p.size<=0.1){particles.splice(i,1);}}};
-        drawParticles = function(){particles.forEach(p=>{const lR=Math.max(0,p.life/p.initialLife);let alpha;if(p.type==='launch_puff'){alpha=lR*0.7;}else if(p.type==='trail_smoke'){alpha=lR*0.4;}else if(p.type==='enemy_explosion' || p.type === 'ground_burst'){alpha=lR*0.9;}else if(p.type==='mushroom_stem'){alpha=lR*0.6;}else if(p.type==='mushroom_cap'){alpha=lR*0.7;}else{alpha=lR;}ctx.fillStyle=`rgba(${Math.round(p.color[0])},${Math.round(p.color[1])},${Math.round(p.color[2])},${alpha})`;if(p.size>0.1){ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();}});};
+        updateParticles = function(){
+            for(let i=particles.length-1;i>=0;i--){
+                const p=particles[i];
+                p.x+=p.vx;
+                p.y+=p.vy;
+                p.life--;
+                const lR=Math.max(0,p.life/p.initialLife);
+                if(p.type==='launch_puff'){
+                    p.size=p.initialSize*lR;
+                    p.color=[lerp(LAUNCH_PUFF_COLOR_END[0],LAUNCH_PUFF_COLOR_START[0],lR),
+                            lerp(LAUNCH_PUFF_COLOR_END[1],LAUNCH_PUFF_COLOR_START[1],lR),
+                            lerp(LAUNCH_PUFF_COLOR_END[2],LAUNCH_PUFF_COLOR_START[2],lR)];
+                }else if(p.type==='trail_smoke'){
+                    p.size=lerp(p.endRadius,p.initialSize,lR);
+                    p.color=[lerp(TRAIL_SMOKE_COLOR_END[0],TRAIL_SMOKE_COLOR_START[0],lR),
+                            lerp(TRAIL_SMOKE_COLOR_END[1],TRAIL_SMOKE_COLOR_START[1],lR),
+                            lerp(TRAIL_SMOKE_COLOR_END[2],TRAIL_SMOKE_COLOR_START[2],lR)];
+                    p.vx*=0.99;
+                    p.vy*=0.99;
+                }else if(p.type==='enemy_explosion'){
+                    p.size=p.initialSize*lR*(1+(1-lR)*0.5);
+                    const c1=p.initialColor;
+                    const c2=[50,50,50];
+                    p.color=[lerp(c2[0],c1[0],lR),
+                            lerp(c2[1],c1[1],lR),
+                            lerp(c2[2],c1[2],lR)];
+                    p.vy+=GRAVITY*0.1;
+                }else if(p.type==='ground_burst'){
+                    p.size=p.initialSize*lR;
+                    p.vy+=GRAVITY*0.2;
+                }else if(p.type==='mushroom_stem'){
+                    // Particles stay in place, just fade out over time
+                    p.size=Math.min(p.initialSize*(1+(1-lR)*p.expandRate*5), p.initialSize*2);
+                    p.vx*=0.98;
+                }else if(p.type==='mushroom_cap'){
+                    p.size=Math.min(p.initialSize*(1+(1-lR)*p.expandRate*10),p.maxCapRadius*lR*1.5);
+                    p.vy*=0.95;
+                    p.vx*=0.95;
+                }
+                if(p.life<=0||p.size<=0.1){
+                    particles.splice(i,1);
+                }
+            }
+        };
+        drawParticles = function(){
+            particles.forEach(p=>{
+                const lR=Math.max(0,p.life/p.initialLife);
+                let alpha;
+                if(p.type==='launch_puff'){
+                    alpha=lR*0.7;
+                }else if(p.type==='trail_smoke'){
+                    alpha=lR*0.4;
+                }else if(p.type==='enemy_explosion' || p.type === 'ground_burst'){
+                    alpha=lR*0.9;
+                }else if(p.type==='mushroom_stem'){
+                    alpha=lR*0.9; // Increased opacity for stem particles
+                }else if(p.type==='mushroom_cap'){
+                    alpha=lR*0.7;
+                }else{
+                    alpha=lR;
+                }
+                ctx.fillStyle=`rgba(${Math.round(p.color[0])},${Math.round(p.color[1])},${Math.round(p.color[2])},${alpha})`;
+                if(p.size>0.1){
+                    ctx.beginPath();
+                    ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+                    ctx.fill();
+                }
+            });
+        };
 
 
         // --- Base Object ---
@@ -325,15 +467,133 @@
                     missileBoostSound.currentTime = 0;
                     missileBoostSound.loop = false;
                 }
-                this.explosionProgress++; if (this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const fieryProgress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;this.currentExplosionRadius = fieryProgress * MAX_EXPLOSION_RADIUS;} else {this.currentExplosionRadius = (this.explosionProgress === EXPLOSION_DURATION_FRAMES) ? MAX_EXPLOSION_RADIUS : 0;}if (this.shockwaveRadius < this.shockwaveMaxRadius) {this.shockwaveRadius += this.shockwaveExpansionRate;}this.shockwaveRadius = Math.min(this.shockwaveRadius, this.shockwaveMaxRadius);if (this.explosionProgress <= EXPLOSION_DURATION_FRAMES && this.currentExplosionRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i];if (checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, bomber)) {createEnemyDestructionPuff(bomber.x, bomber.y);bombers.splice(i, 1); continue; }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.currentExplosionRadius + bomb.radius) * (this.currentExplosionRadius + bomb.radius)) {createEnemyDestructionPuff(bomb.x, bomb.y);bombs.splice(i, 1); continue; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 50; if (bld.health < 0) bld.health = 0;}}}if (this.shockwaveRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i]; if (!bomber.isCrashing && checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, bomber)) {bomber.isCrashing = true;bomber.vx = (Math.random() - 0.5) * BOMBER_SPEED * 0.3; bomber.vy = 0.1; bomber.rotation = 0;bomber.rotationSpeed = (Math.random() - 0.5) * 0.15 + 0.03 * (bomber.vx > 0 ? 1 : -1); }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (!bomb.isDisabledByShockwave && distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.shockwaveRadius + bomb.radius) * (this.shockwaveRadius + bomb.radius)) {bomb.isDisabledByShockwave = true; bomb.parachuteTattered = true; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 25; if (bld.health < 0) bld.health = 0;}}}if (this.explosionProgress >= EXPLOSION_DURATION_FRAMES && this.shockwaveRadius >= this.shockwaveMaxRadius) {this.reset(); }}if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {this.x += this.vx;this.y += this.vy;}if (this.state !== MissileState.EXPLODING && (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius || this.y > CANVAS_HEIGHT + this.radius || this.y < -CANVAS_HEIGHT)) { if (this.state !== MissileState.IDLE) { showMessage("Missile lost.", 1500); this.reset(); }}};
+                this.explosionProgress++; if (this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const fieryProgress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;this.currentExplosionRadius = fieryProgress * MAX_EXPLOSION_RADIUS;} else {this.currentExplosionRadius = (this.explosionProgress === EXPLOSION_DURATION_FRAMES) ? MAX_EXPLOSION_RADIUS : 0;}if (this.shockwaveRadius < this.shockwaveMaxRadius) {this.shockwaveRadius += this.shockwaveExpansionRate;}this.shockwaveRadius = Math.min(this.shockwaveRadius, this.shockwaveMaxRadius);if (this.explosionProgress <= EXPLOSION_DURATION_FRAMES && this.currentExplosionRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i];if (checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, bomber)) {createEnemyDestructionPuff(bomber.x, bomber.y);bombers.splice(i, 1); continue; }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.currentExplosionRadius + bomb.radius) * (this.currentExplosionRadius + bomb.radius)) {createEnemyDestructionPuff(bomb.x, bomb.y);bombs.splice(i, 1); continue; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= MISSILE_EXPLOSION_DAMAGE; if (bld.health < 0) bld.health = 0;}}}if (this.shockwaveRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i]; if (!bomber.isCrashing && checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, bomber)) {bomber.isCrashing = true;bomber.vx = (Math.random() - 0.5) * BOMBER_SPEED * 0.3; bomber.vy = 0.1; bomber.rotation = 0;bomber.rotationSpeed = (Math.random() - 0.5) * 0.15 + 0.03 * (bomber.vx > 0 ? 1 : -1); }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (!bomb.isDisabledByShockwave && distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.shockwaveRadius + bomb.radius) * (this.shockwaveRadius + bomb.radius)) {bomb.isDisabledByShockwave = true; bomb.parachuteTattered = true; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= MISSILE_SHOCKWAVE_DAMAGE; if (bld.health < 0) bld.health = 0;}}}if (this.explosionProgress >= EXPLOSION_DURATION_FRAMES && this.shockwaveRadius >= this.shockwaveMaxRadius) {this.reset(); }}if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {this.x += this.vx;this.y += this.vy;}if (this.state !== MissileState.EXPLODING && (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius || this.y > CANVAS_HEIGHT + this.radius || this.y < -CANVAS_HEIGHT)) { if (this.state !== MissileState.IDLE) { showMessage("Missile lost.", 1500); this.reset(); }}};
         missile.draw = function() { if (this.state === MissileState.EXPLODING && this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const progress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;const fieryRadius = progress * MAX_EXPLOSION_RADIUS; const alpha = 1 - progress; ctx.beginPath(); ctx.arc(this.x, this.y, fieryRadius, 0, Math.PI * 2);ctx.fillStyle = `rgba(230, 126, 34, ${alpha * 0.8})`; ctx.fill();ctx.beginPath(); ctx.arc(this.x, this.y, fieryRadius * 0.6, 0, Math.PI * 2);ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`; ctx.fill();}if (this.state === MissileState.EXPLODING && this.shockwaveRadius > 0 && this.shockwaveRadius <= this.shockwaveMaxRadius) {const shockwaveAlpha = 0.4 * (1 - (this.shockwaveRadius / this.shockwaveMaxRadius)); ctx.strokeStyle = `rgba(220, 220, 255, ${shockwaveAlpha})`;ctx.lineWidth = 2 + 3 * (this.shockwaveRadius / this.shockwaveMaxRadius) ; if(this.shockwaveRadius > this.shockwaveMaxRadius / 2) { ctx.lineWidth = 2 + 3 * (1 - (this.shockwaveRadius / this.shockwaveMaxRadius));}ctx.beginPath();ctx.arc(this.x, this.y, this.shockwaveRadius, 0, Math.PI * 2);ctx.stroke();ctx.lineWidth = 1; }if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {ctx.save(); ctx.translate(this.x, this.y);let flightAngle = (this.vx === 0 && this.vy === 0) ? this.angle : Math.atan2(this.vy, this.vx);ctx.rotate(flightAngle);ctx.fillStyle = this.state === MissileState.LAUNCH_PRESSED ? MISSILE_LAUNCHING_COLOR : MISSILE_COLOR;ctx.beginPath(); ctx.ellipse(0, 0, this.radius * 1.5, this.radius * 0.8, 0, -Math.PI/2, Math.PI/2);ctx.lineTo(-this.radius * 0.5, 0); ctx.closePath(); ctx.fill();if (this.state === MissileState.LAUNCH_PRESSED) {ctx.fillStyle = EXPLOSION_COLOR; ctx.beginPath();ctx.moveTo(-this.radius * 1.5, 0);ctx.lineTo(-this.radius * 2.5 - (Math.random()*this.radius), this.radius * 0.5);ctx.lineTo(-this.radius * 2.5 - (Math.random()*this.radius), -this.radius * 0.5);ctx.closePath(); ctx.fill();}ctx.restore();} else if (this.state === MissileState.IDLE) { const tip = base.getLauncherTip();ctx.save(); ctx.translate(tip.x, tip.y);ctx.rotate(base.launcherAngle); ctx.fillStyle = MISSILE_COLOR;ctx.beginPath(); ctx.ellipse(0, 0, this.radius * 1.5, this.radius * 0.8, 0, -Math.PI/2, Math.PI/2);ctx.lineTo(-this.radius * 0.5, 0); ctx.closePath(); ctx.fill(); ctx.restore();}};
 
 
         // --- Bomber Object & Functions ---
-        function spawnBomber() { /* ... (same) ... */ }
+        function spawnBomber() {
+            const fL=Math.random()<0.5;
+            const y=Math.random()*(CANVAS_HEIGHT*(BOMBER_SPAWN_MAX_Y_FACTOR-BOMBER_SPAWN_MIN_Y_FACTOR))+(CANVAS_HEIGHT*BOMBER_SPAWN_MIN_Y_FACTOR);
+            const x=fL?-BOMBER_WIDTH/2:CANVAS_WIDTH+BOMBER_WIDTH/2;
+            const vx=fL?BOMBER_SPEED:-BOMBER_SPEED;
+            bombers.push({
+                x,
+                y,
+                vx,
+                vy:0,
+                width:BOMBER_WIDTH,
+                height:BOMBER_HEIGHT,
+                dropTimer:Math.random()*(BOMBER_DROP_INTERVAL_MAX-BOMBER_DROP_INTERVAL_MIN)+BOMBER_DROP_INTERVAL_MIN,
+                bombsDroppedCount:0,
+                isCrashing:false,
+                rotation:0,
+                rotationSpeed:0,
+                markedForRemoval:false,
+                lastBombDropTime: 0,
+                isFirstBomber: isFirstBomber,
+                hasReachedMidpoint: false,
+                draw:function(){
+                    ctx.save();
+                    ctx.translate(this.x,this.y);
+                    if(this.isCrashing){
+                        ctx.rotate(this.rotation);
+                        ctx.fillStyle='#455A64';
+                    }else{
+                        ctx.fillStyle='#607D8B';
+                    }
+                    ctx.fillRect(-this.width/2,-this.height/2,this.width,this.height);
+                    const wW=this.width*0.4;
+                    const wH=this.height*1.8;
+                    ctx.fillRect(-wW/2,-wH/2,wW,wH);
+                    const tW=this.width*0.2;
+                    const tH=this.height*1.2;
+                    let tXO=this.isCrashing?this.width*0.3:(this.vx>0?-this.width*0.4:this.width*0.4);
+                    if(this.isCrashing&&this.vx<0)tXO=-this.width*0.3;
+                    ctx.fillRect(tXO-tW/2,-tH/2,tW,tH);
+                    ctx.restore();
+                },
+                update:function(){
+                    if(this.isCrashing){
+                        this.vy+=GRAVITY*BOMBER_CRASH_GRAVITY_FACTOR;
+                        this.y+=this.vy;
+                        this.x+=this.vx;
+                        this.vx*=0.99;
+                        this.rotation+=this.rotationSpeed;
+                        if(this.y>=CANVAS_HEIGHT-this.height/2){
+                            // Check for building damage when crashed bomber hits ground
+                            for(let i=buildings.length-1;i>=0;i--){
+                                const bld=buildings[i];
+                                if(checkCollisionCircleRect({x:this.x,y:CANVAS_HEIGHT,radius:this.width},{x:bld.x,y:bld.y,width:bld.width,height:bld.height})){
+                                    bld.health-=CRASHED_BOMBER_DAMAGE;
+                                    if(bld.health<0)bld.health=0;
+                                }
+                            }
+                            this.markedForRemoval=true;
+                        }
+                        return;
+                    }
+
+                    this.x+=this.vx;
+
+                    // Only check midpoint for the first bomber of the game
+                    if (this.isFirstBomber && !this.hasReachedMidpoint) {
+                        const distanceFromStart = Math.abs(this.x - (this.vx > 0 ? -BOMBER_WIDTH/2 : CANVAS_WIDTH + BOMBER_WIDTH/2));
+                        if (distanceFromStart >= BOMBER_MIN_DISTANCE_FOR_FIRST_BOMB) {
+                            this.hasReachedMidpoint = true;
+                        }
+                    }
+
+                    // Allow bomb drops if either:
+                    // 1. This is not the first bomber, or
+                    // 2. This is the first bomber and it has reached the midpoint
+                    if (!this.isFirstBomber || this.hasReachedMidpoint) {
+                        this.dropTimer--;
+                        
+                        // Check if enough time has passed since last bomb drop
+                        const timeSinceLastBomb = this.bombsDroppedCount > 0 ? 
+                            (this.dropTimer - this.lastBombDropTime) : 0;
+                        
+                        if (this.dropTimer <= 0 && 
+                            this.bombsDroppedCount < BOMBER_MAX_BOMBS_DROPPED && 
+                            (this.bombsDroppedCount === 0 || timeSinceLastBomb >= BOMBER_MIN_TIME_BETWEEN_BOMBS)) {
+                            
+                            // Check if there are any buildings with health > 0 below the bomber
+                            let hasValidTarget = false;
+                            for (let i = 0; i < buildings.length; i++) {
+                                const bld = buildings[i];
+                                // Check if bomber is over the building and building has health
+                                if (bld.health > 0 && 
+                                    this.x >= bld.x && 
+                                    this.x <= bld.x + bld.width) {
+                                    hasValidTarget = true;
+                                    break;
+                                }
+                            }
+                            
+                            // Only drop bomb if there's a valid target
+                            if (hasValidTarget) {
+                                spawnBomb(this.x, this.y + this.height/2, this.y);
+                                this.bombsDroppedCount++;
+                                this.lastBombDropTime = this.dropTimer;
+                                this.dropTimer = Math.random() * (BOMBER_DROP_INTERVAL_MAX - BOMBER_DROP_INTERVAL_MIN) + BOMBER_DROP_INTERVAL_MIN;
+                            } else {
+                                // If no valid target, reset timer to a shorter interval
+                                this.dropTimer = Math.random() * 30 + 10; // Check again in 10-40 frames
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // After spawning the first bomber, set the flag to false
+            if (isFirstBomber) {
+                isFirstBomber = false;
+            }
+        }
+
         function updateBombers() { /* ... (same) ... */ }
         function drawBombers() { /* ... (same) ... */ }
-        spawnBomber = function(){const fL=Math.random()<0.5;const y=Math.random()*(CANVAS_HEIGHT*(BOMBER_SPAWN_MAX_Y_FACTOR-BOMBER_SPAWN_MIN_Y_FACTOR))+(CANVAS_HEIGHT*BOMBER_SPAWN_MIN_Y_FACTOR);const x=fL?-BOMBER_WIDTH/2:CANVAS_WIDTH+BOMBER_WIDTH/2;const vx=fL?BOMBER_SPEED:-BOMBER_SPEED;bombers.push({x,y,vx,vy:0,width:BOMBER_WIDTH,height:BOMBER_HEIGHT,dropTimer:Math.random()*(BOMBER_DROP_INTERVAL_MAX-BOMBER_DROP_INTERVAL_MIN)+BOMBER_DROP_INTERVAL_MIN,bombsDroppedCount:0,isCrashing:false,rotation:0,rotationSpeed:0,markedForRemoval:false,draw:function(){ctx.save();ctx.translate(this.x,this.y);if(this.isCrashing){ctx.rotate(this.rotation);ctx.fillStyle='#455A64';}else{ctx.fillStyle='#607D8B';}ctx.fillRect(-this.width/2,-this.height/2,this.width,this.height);const wW=this.width*0.4;const wH=this.height*1.8;ctx.fillRect(-wW/2,-wH/2,wW,wH);const tW=this.width*0.2;const tH=this.height*1.2;let tXO=this.isCrashing?this.width*0.3:(this.vx>0?-this.width*0.4:this.width*0.4);if(this.isCrashing&&this.vx<0)tXO=-this.width*0.3;ctx.fillRect(tXO-tW/2,-tH/2,tW,tH);ctx.restore();},update:function(){if(this.isCrashing){this.vy+=GRAVITY*BOMBER_CRASH_GRAVITY_FACTOR;this.y+=this.vy;this.x+=this.vx;this.vx*=0.99;this.rotation+=this.rotationSpeed;if(this.y>CANVAS_HEIGHT+this.height*2){this.markedForRemoval=true;}return;}this.x+=this.vx;this.dropTimer--;if(this.dropTimer<=0&&this.bombsDroppedCount<BOMBER_MAX_BOMBS_DROPPED){spawnBomb(this.x,this.y+this.height/2,this.y);this.bombsDroppedCount++;this.dropTimer=Math.random()*(BOMBER_DROP_INTERVAL_MAX-BOMBER_DROP_INTERVAL_MIN)+BOMBER_DROP_INTERVAL_MIN;}}});};
         updateBombers = function(){for(let i=bombers.length-1;i>=0;i--){const b=bombers[i];b.update();if(b.markedForRemoval||((!b.isCrashing)&&((b.vx>0&&b.x>CANVAS_WIDTH+b.width*2)||(b.vx<0&&b.x<-b.width*2)))){bombers.splice(i,1);}}bomberSpawnTimer--;if(bomberSpawnTimer<=0&&bombers.length<MAX_ONSCREEN_BOMBERS){spawnBomber();bomberSpawnTimer=BOMBER_SPAWN_INTERVAL;}else if(bomberSpawnTimer<=0&&bombers.length>=MAX_ONSCREEN_BOMBERS){bomberSpawnTimer=BOMBER_SPAWN_INTERVAL/3;}};
         drawBombers = function(){bombers.forEach(b=>b.draw());};
 
@@ -358,7 +618,6 @@
                         this.x += this.vx;
                         if (this.y >= CANVAS_HEIGHT - this.radius) { // Hit ground
                             this.hasDetonated = true; // Mark as "processed" to be removed, but no explosion
-                            // createEnemyDestructionPuff(this.x, this.y); // Optional: small puff for dud
                         }
                         return; // Skip normal detonation logic
                     }
@@ -377,7 +636,7 @@
                     this.y += this.vy;
                     this.x += this.vx; 
 
-                    // MODIFIED: Ground detonation logic
+                    // MODIFIED: Ground detonation logic with distance-based damage
                     if (this.y >= BOMB_GROUND_DETONATION_Y) { // Use new constant
                         this.hasDetonated = true; // Mark that it has detonated
                         createMushroomCloud(this.x, CANVAS_HEIGHT - 10); // Mushroom cloud starts near bottom
@@ -390,12 +649,19 @@
                         population -= loss;
                         if (population < 0) population = 0;
 
-                        // Damage buildings from bomb ground explosion
+                        // Damage buildings from bomb ground explosion with distance falloff
                         for(let i = buildings.length - 1; i >= 0; i--) {
                             const bld = buildings[i];
-                            // Use MAX_EXPLOSION_RADIUS for bomb's ground impact for simplicity
-                            if(checkCollisionCircleRect({x: this.x, y: CANVAS_HEIGHT, radius: MAX_EXPLOSION_RADIUS}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) {
-                                bld.health -= 75; // Bombs do significant damage to buildings
+                            // Calculate distance from explosion center to building center
+                            const dx = Math.abs((bld.x + bld.width/2) - this.x);
+                            const dy = Math.abs((CANVAS_HEIGHT - bld.height/2) - CANVAS_HEIGHT);
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            // Calculate damage falloff based on distance
+                            if (distance <= BOMB_DAMAGE_FALLOFF_RADIUS) {
+                                const falloffFactor = 1 - (distance / BOMB_DAMAGE_FALLOFF_RADIUS) * (1 - BOMB_MIN_DAMAGE_PERCENT);
+                                const damage = Math.floor(BOMB_GROUND_DAMAGE * falloffFactor);
+                                bld.health -= damage;
                                 if (bld.health < 0) bld.health = 0;
                             }
                         }
@@ -409,7 +675,125 @@
             });
         }
         // (Copied spawnBomb draw method for brevity)
-        spawnBomb = function(x,y,dropY){bombs.push({x,y,vx:0,vy:0,radius:BOMB_RADIUS,color:BOMB_COLOR,parachuteDeployed:false,initialDropY:dropY,isDisabledByShockwave:false,parachuteTattered:false,hasDetonated:false,draw:function(){ctx.save();ctx.translate(this.x,this.y);ctx.rotate(Math.PI/2);ctx.fillStyle=this.color;ctx.beginPath();ctx.ellipse(0,0,BOMB_LENGTH/2,BOMB_WIDTH/2,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-BOMB_LENGTH/2,0);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,BOMB_FIN_SIZE/1.5);ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,-BOMB_FIN_SIZE/1.5);ctx.closePath();ctx.fill();ctx.restore();const pBY=this.y-BOMB_LENGTH/2-2;if(this.parachuteTattered){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1;const tW=PARACHUTE_WIDTH*TATTERED_PARACHUTE_WIDTH_FACTOR;const tH=PARACHUTE_HEIGHT*TATTERED_PARACHUTE_HEIGHT_FACTOR;ctx.beginPath();ctx.moveTo(this.x-tW/2,pBY);ctx.quadraticCurveTo(this.x-tW/4,pBY-tH*1.2,this.x,pBY-tH);ctx.quadraticCurveTo(this.x+tW/4,pBY-tH*0.8,this.x+tW/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-tW/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+tW/4,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}else if(this.parachuteDeployed){ctx.strokeStyle=PARACHUTE_COLOR;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/2,pBY);ctx.quadraticCurveTo(this.x,pBY-PARACHUTE_HEIGHT,this.x+PARACHUTE_WIDTH/2,pBY);ctx.stroke();ctx.beginPath();ctx.moveTo(this.x-PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.moveTo(this.x+PARACHUTE_WIDTH/3,pBY);ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);ctx.stroke();}ctx.lineWidth=1;},update:function(){if(this.hasDetonated)return;if(this.isDisabledByShockwave){this.vy+=GRAVITY;this.y+=this.vy;this.x+=this.vx;if(this.y>=CANVAS_HEIGHT-this.radius){this.hasDetonated=true;}return;}if(!this.parachuteDeployed&&(this.y-this.initialDropY)>=CANVAS_HEIGHT*PARACHUTE_DEPLOY_Y_FALL_DISTANCE_FACTOR){this.parachuteDeployed=true;this.vy=PARACHUTE_FALL_SPEED;}if(this.parachuteDeployed){this.vy=PARACHUTE_FALL_SPEED;}else{this.vy+=GRAVITY;}this.y+=this.vy;this.x+=this.vx;if(this.y>=BOMB_GROUND_DETONATION_Y){this.hasDetonated=true;createMushroomCloud(this.x,CANVAS_HEIGHT-10);if(enemyExplosionSound){enemyExplosionSound.currentTime=0;enemyExplosionSound.play();}screenFlashTimer=SCREEN_FLASH_DURATION*ENEMY_BOMB_FLASH_MULTIPLIER;const loss=Math.floor(Math.random()*(MAX_POPULATION_LOSS-MIN_POPULATION_LOSS+1))+MIN_POPULATION_LOSS;population-=loss;if(population<0)population=0;for(let i=buildings.length-1;i>=0;i--){const bld=buildings[i];if(checkCollisionCircleRect({x:this.x,y:CANVAS_HEIGHT,radius:MAX_EXPLOSION_RADIUS},{x:bld.x,y:bld.y,width:bld.width,height:bld.height})){bld.health-=75;if(bld.health<0)bld.health=0;}}if(population===0&&!gameOver){gameOver=true;showMessage("CITY DESTROYED - GAME OVER",10000);}}}});};
+        spawnBomb = function(x,y,dropY){
+            bombs.push({
+                x,y,
+                vx:0,
+                vy:0,
+                radius:BOMB_RADIUS,
+                color:BOMB_COLOR,
+                parachuteDeployed:false,
+                initialDropY:dropY,
+                isDisabledByShockwave:false,
+                parachuteTattered:false,
+                hasDetonated:false,
+                draw:function(){
+                    ctx.save();
+                    ctx.translate(this.x,this.y);
+                    ctx.rotate(Math.PI/2);
+                    ctx.fillStyle=this.color;
+                    ctx.beginPath();
+                    ctx.ellipse(0,0,BOMB_LENGTH/2,BOMB_WIDTH/2,0,0,Math.PI*2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(-BOMB_LENGTH/2,0);
+                    ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,BOMB_FIN_SIZE/1.5);
+                    ctx.lineTo(-BOMB_LENGTH/2-BOMB_FIN_SIZE,-BOMB_FIN_SIZE/1.5);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                    const pBY=this.y-BOMB_LENGTH/2-2;
+                    if(this.parachuteTattered){
+                        ctx.strokeStyle=PARACHUTE_COLOR;
+                        ctx.lineWidth=1;
+                        const tW=PARACHUTE_WIDTH*TATTERED_PARACHUTE_WIDTH_FACTOR;
+                        const tH=PARACHUTE_HEIGHT*TATTERED_PARACHUTE_HEIGHT_FACTOR;
+                        ctx.beginPath();
+                        ctx.moveTo(this.x-tW/2,pBY);
+                        ctx.quadraticCurveTo(this.x-tW/4,pBY-tH*1.2,this.x,pBY-tH);
+                        ctx.quadraticCurveTo(this.x+tW/4,pBY-tH*0.8,this.x+tW/2,pBY);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(this.x-tW/3,pBY);
+                        ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);
+                        ctx.moveTo(this.x+tW/4,pBY);
+                        ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);
+                        ctx.stroke();
+                    }else if(this.parachuteDeployed){
+                        ctx.strokeStyle=PARACHUTE_COLOR;
+                        ctx.lineWidth=1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(this.x-PARACHUTE_WIDTH/2,pBY);
+                        ctx.quadraticCurveTo(this.x,pBY-PARACHUTE_HEIGHT,this.x+PARACHUTE_WIDTH/2,pBY);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(this.x-PARACHUTE_WIDTH/3,pBY);
+                        ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);
+                        ctx.moveTo(this.x+PARACHUTE_WIDTH/3,pBY);
+                        ctx.lineTo(this.x,this.y-BOMB_LENGTH/2+BOMB_RADIUS/2);
+                        ctx.stroke();
+                    }
+                    ctx.lineWidth=1;
+                },
+                update:function(){
+                    if(this.hasDetonated)return;
+                    if(this.isDisabledByShockwave){
+                        this.vy+=GRAVITY;
+                        this.y+=this.vy;
+                        this.x+=this.vx;
+                        if(this.y>=CANVAS_HEIGHT-this.radius){
+                            this.hasDetonated=true;
+                            // Check for building damage when disabled bomb hits ground
+                            for(let i=buildings.length-1;i>=0;i--){
+                                const bld=buildings[i];
+                                if(checkCollisionCircleRect({x:this.x,y:CANVAS_HEIGHT,radius:BOMB_RADIUS*2},{x:bld.x,y:bld.y,width:bld.width,height:bld.height})){
+                                    bld.health-=DISABLED_BOMB_DAMAGE;
+                                    if(bld.health<0)bld.health=0;
+                                }
+                            }
+                        }
+                        return;
+                    }
+                    if(!this.parachuteDeployed&&(this.y-this.initialDropY)>=CANVAS_HEIGHT*PARACHUTE_DEPLOY_Y_FALL_DISTANCE_FACTOR){
+                        this.parachuteDeployed=true;
+                        this.vy=PARACHUTE_FALL_SPEED;
+                    }
+                    if(this.parachuteDeployed){
+                        this.vy=PARACHUTE_FALL_SPEED;
+                    }else{
+                        this.vy+=GRAVITY;
+                    }
+                    this.y+=this.vy;
+                    this.x+=this.vx;
+                    if(this.y>=BOMB_GROUND_DETONATION_Y){
+                        this.hasDetonated=true;
+                        createMushroomCloud(this.x,CANVAS_HEIGHT-10);
+                        if(enemyExplosionSound){
+                            enemyExplosionSound.currentTime=0;
+                            enemyExplosionSound.play();
+                        }
+                        screenFlashTimer=SCREEN_FLASH_DURATION*ENEMY_BOMB_FLASH_MULTIPLIER;
+                        
+                        // Damage buildings from bomb ground explosion with distance falloff
+                        for(let i=buildings.length-1;i>=0;i--){
+                            const bld=buildings[i];
+                            // Calculate distance from explosion center to building center
+                            const dx = Math.abs((bld.x + bld.width/2) - this.x);
+                            const dy = Math.abs((CANVAS_HEIGHT - bld.height/2) - CANVAS_HEIGHT);
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            // Calculate damage falloff based on distance
+                            if (distance <= BOMB_DAMAGE_FALLOFF_RADIUS) {
+                                const falloffFactor = 1 - (distance / BOMB_DAMAGE_FALLOFF_RADIUS) * (1 - BOMB_MIN_DAMAGE_PERCENT);
+                                const damage = Math.floor(BOMB_GROUND_DAMAGE * falloffFactor);
+                                bld.health -= damage;
+                                if (bld.health < 0) bld.health = 0;
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         function updateBombs() { /* ... (same) ... */ }
         function drawBombs() { /* ... (same) ... */ }
@@ -421,6 +805,7 @@
             buildings = []; // Clear existing buildings
             let currentX = 0;
             const buildingSpacing = 5; // Small gap between buildings
+            let totalBuildings = 0;
 
             while (currentX < CANVAS_WIDTH) {
                 const buildingWidth = Math.random() * (BUILDING_WIDTH_MAX - BUILDING_WIDTH_MIN) + BUILDING_WIDTH_MIN;
@@ -431,6 +816,21 @@
                 const baseExclusionRight = base.x + base.width / 2 + BUILDING_BASE_GAP;
 
                 if (currentX + buildingWidth < baseExclusionLeft || currentX > baseExclusionRight) {
+                    // Generate window layout for this building
+                    const windowRows = Math.floor(buildingHeight / 20); // Windows every 20 pixels vertically
+                    const windowCols = Math.floor(buildingWidth / 15); // Windows every 15 pixels horizontally
+                    const windows = [];
+                    
+                    for (let row = 0; row < windowRows; row++) {
+                        for (let col = 0; col < windowCols; col++) {
+                            windows.push({
+                                x: col * 15 + 5, // 5px padding from left
+                                y: row * 20 + 5, // 5px padding from top
+                                lit: Math.random() < 0.7 // 70% chance of being lit initially
+                            });
+                        }
+                    }
+
                     buildings.push({
                         x: currentX,
                         y: CANVAS_HEIGHT, // Bottom of the building is at the canvas bottom
@@ -438,35 +838,102 @@
                         height: buildingHeight,
                         health: BUILDING_MAX_HEALTH,
                         maxHealth: BUILDING_MAX_HEALTH,
-                        color: BUILDING_COLOR_HEALTHY
+                        color: BUILDING_COLOR_HEALTHY,
+                        windows: windows,
+                        cracks: [] // Will store crack positions
                     });
+                    totalBuildings++;
                 }
                 currentX += buildingWidth + buildingSpacing;
+            }
+            console.log(`Spawned ${totalBuildings} buildings with ${BUILDING_MAX_HEALTH} health each`);
+            // Calculate initial population based on building health
+            updatePopulation();
+        }
+
+        function updatePopulation() {
+            const totalHealth = buildings.reduce((total, building) => total + building.health, 0);
+            population = totalHealth * POPULATION_PER_HEALTH;
+            console.log(`Total building health: ${totalHealth}, Population: ${population}`);
+            if (population === 0 && !gameOver) {
+                gameOver = true;
+                showMessage("CITY DESTROYED - GAME OVER", 10000);
             }
         }
 
         function updateBuildings() {
             // Buildings are static but their health/appearance can change
             buildings.forEach(bld => {
+                const healthPercent = bld.health / bld.maxHealth;
+                
                 if (bld.health <= 0) {
                     bld.color = BUILDING_COLOR_DESTROYED;
                     bld.height = BUILDING_HEIGHT_MIN / 3; // Rubble height
-                } else if (bld.health < bld.maxHealth * 0.5) {
+                    // All windows go dark when building is destroyed
+                    bld.windows.forEach(w => w.lit = false);
+                } else if (healthPercent < 0.5) {
                     bld.color = BUILDING_COLOR_DAMAGED_HIGH;
+                    // All windows go dark when health is below 50%
+                    bld.windows.forEach(w => w.lit = false);
+                    
+                    // Add cracks if we don't have enough
+                    if (bld.cracks.length < 5) {
+                        const newCrack = {
+                            x: Math.random() * bld.width,
+                            y: Math.random() * bld.height,
+                            angle: Math.random() * Math.PI * 2,
+                            length: Math.random() * 20 + 10
+                        };
+                        bld.cracks.push(newCrack);
+                    }
                 } else if (bld.health < bld.maxHealth) {
                     bld.color = BUILDING_COLOR_DAMAGED_LOW;
+                    // Randomly turn off some windows when damaged
+                    bld.windows.forEach(w => {
+                        if (w.lit && Math.random() < 0.3) { // 30% chance to turn off a lit window
+                            w.lit = false;
+                        }
+                    });
                 } else {
                     bld.color = BUILDING_COLOR_HEALTHY;
                 }
             });
+            updatePopulation(); // Update population whenever building health changes
         }
 
         function drawBuildings() {
             buildings.forEach(bld => {
+                // Draw building base
                 ctx.fillStyle = bld.color;
-                // Buildings are drawn from their bottom-left corner (x, CANVAS_HEIGHT - height)
                 ctx.fillRect(bld.x, CANVAS_HEIGHT - bld.height, bld.width, bld.height);
-                // Optional: Add a simple border or detail
+                
+                // Draw cracks if health is below 50%
+                if (bld.health < bld.maxHealth * 0.5) {
+                    ctx.strokeStyle = CRACK_COLOR;
+                    ctx.lineWidth = 1;
+                    bld.cracks.forEach(crack => {
+                        ctx.beginPath();
+                        ctx.moveTo(bld.x + crack.x, CANVAS_HEIGHT - bld.height + crack.y);
+                        ctx.lineTo(
+                            bld.x + crack.x + Math.cos(crack.angle) * crack.length,
+                            CANVAS_HEIGHT - bld.height + crack.y + Math.sin(crack.angle) * crack.length
+                        );
+                        ctx.stroke();
+                    });
+                }
+                
+                // Draw windows
+                bld.windows.forEach(window => {
+                    ctx.fillStyle = window.lit ? WINDOW_COLOR_LIT : WINDOW_COLOR_DARK;
+                    ctx.fillRect(
+                        bld.x + window.x,
+                        CANVAS_HEIGHT - bld.height + window.y,
+                        8, // window width
+                        12  // window height
+                    );
+                });
+
+                // Optional: Add a simple border
                 if (bld.health > 0) {
                     ctx.strokeStyle = 'rgba(0,0,0,0.2)';
                     ctx.strokeRect(bld.x, CANVAS_HEIGHT - bld.height, bld.width, bld.height);
@@ -597,10 +1064,10 @@
 
         function startGame() {
             missile.reset();
-            spawnBuildings();
+            spawnBuildings(); // This will now calculate initial population
             bomberSpawnTimer = BOMBER_SPAWN_INTERVAL / 2;
-            population = INITIAL_POPULATION;
             gameOver = false;
+            isFirstBomber = true;
             showMessage("Game Ready! Defend the city!", 3000);
             if (canvas) {
                 canvas.focus();

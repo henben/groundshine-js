@@ -24,11 +24,29 @@
             display: none; /* Hidden by default */
             text-align: center;
         }
+        /* Focus indicator styles */
+        canvas:focus {
+            border: 2px solid #4CAF50;
+        }
+        .focus-warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" tabindex="0"></canvas>
     <div id="messageBox" class="message-box"></div>
+    <div id="focusWarning" class="focus-warning">Click the game window to enable controls</div>
     <audio id="missileBoostSound" src="missile_boost.wav" preload="auto"></audio>
     <audio id="playerExplosionSound" src="player_explosion.wav" preload="auto"></audio>
     <audio id="enemyExplosionSound" src="enemy_explosion.wav" preload="auto"></audio>
@@ -37,6 +55,7 @@
         // Get canvas and context
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const focusWarning = document.getElementById('focusWarning');
 
         // DOM Element for messages
         const messageBox = document.getElementById('messageBox');
@@ -459,32 +478,55 @@
         // --- Event Listeners (Single missile logic) ---
         canvas.addEventListener('mousemove',(e)=>{const r=canvas.getBoundingClientRect();mousePos.x=e.clientX-r.left;mousePos.y=e.clientY-r.top;});
         
-        document.addEventListener('keydown',(e)=>{
-            if (gameOver) return; 
-            const k=e.key.toLowerCase();
-            keysPressed[k]=true; 
-            
-            if(k==='c'){ 
-                if (missile.state === MissileState.IDLE) { 
-                    missile.launch(base.launcherAngle, base.getLauncherTip());
-                }
-            } else if(k===' '){
-                e.preventDefault();
-                missile.triggerExplosion(); 
+        // Focus handling
+        canvas.addEventListener('click', () => {
+            canvas.focus();
+            focusWarning.style.display = 'none';
+        });
+
+        canvas.addEventListener('focus', () => {
+            focusWarning.style.display = 'none';
+        });
+
+        canvas.addEventListener('blur', () => {
+            if (!gameOver) {
+                focusWarning.style.display = 'block';
             }
         });
 
-        document.addEventListener('keyup',(e)=>{
-            const k=e.key.toLowerCase();
-            keysPressed[k]=false; 
+        // Modified key event listeners to work with both canvas and document focus
+        function handleKeyDown(e) {
+            if (gameOver) return;
+            const k = e.key.toLowerCase();
+            keysPressed[k] = true;
+            
+            if (k === 'c') {
+                if (missile.state === MissileState.IDLE) {
+                    missile.launch(base.launcherAngle, base.getLauncherTip());
+                }
+            } else if (k === ' ') {
+                e.preventDefault();
+                missile.triggerExplosion();
+            }
+        }
 
-            if(k==='c'){
+        function handleKeyUp(e) {
+            const k = e.key.toLowerCase();
+            keysPressed[k] = false;
+
+            if (k === 'c') {
                 if (missile.state === MissileState.LAUNCH_PRESSED) {
                     missile.state = MissileState.FLYING_FREE;
                     showMessage("Missile coasting. Gravity active.", 2000);
                 }
             }
-        });
+        }
+
+        // Add event listeners to both canvas and document
+        canvas.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keydown', handleKeyDown);
+        canvas.addEventListener('keyup', handleKeyUp);
+        document.addEventListener('keyup', handleKeyUp);
         
         // --- Game Loop ---
         function gameLoop() {
@@ -560,8 +602,9 @@
             population = INITIAL_POPULATION;
             gameOver = false;
             showMessage("Game Ready! Defend the city!", 3000);
-            if (canvas) { // Ensure canvas is not null
+            if (canvas) {
                 canvas.focus();
+                focusWarning.style.display = 'none';
             }
             gameLoop();
         }

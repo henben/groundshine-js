@@ -405,7 +405,7 @@
 
             while (currentX < CANVAS_WIDTH) {
                 const buildingWidth = Math.random() * (BUILDING_WIDTH_MAX - BUILDING_WIDTH_MIN) + BUILDING_WIDTH_MIN;
-                const buildingHeight = Math.random() * (BUILDING_HEIGHT_MIN - BUILDING_HEIGHT_MAX) + BUILDING_HEIGHT_MIN;
+                const buildingHeight = Math.random() * (BUILDING_HEIGHT_MAX - BUILDING_HEIGHT_MIN) + BUILDING_HEIGHT_MIN;
 
                 // Check if this building overlaps with the base's exclusion zone
                 const baseExclusionLeft = base.x - base.width / 2 - BUILDING_BASE_GAP;

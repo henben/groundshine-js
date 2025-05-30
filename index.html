@@ -552,6 +552,20 @@
         }
 
         // --- Initialization ---
+
+        function startGame() {
+            missile.reset();
+            spawnBuildings();
+            bomberSpawnTimer = BOMBER_SPAWN_INTERVAL / 2;
+            population = INITIAL_POPULATION;
+            gameOver = false;
+            showMessage("Game Ready! Defend the city!", 3000);
+            if (canvas) { // Ensure canvas is not null
+                canvas.focus();
+            }
+            gameLoop();
+        }
+
         function isMobileDevice() {
             const userAgent = navigator.userAgent || navigator.vendor || window.opera;
             // Regular expression to catch most mobile and tablet user agents
@@ -564,27 +578,37 @@
 
         function init() {
             if (isMobileDevice()) {
-                // messageBox is already defined globally
-                // canvas is already defined globally
+                // messageBox and canvas are already defined globally
                 messageBox.textContent = "You seem to be on a phone or tablet. Open this game on a laptop or desktop computer to play.";
+                
+                const openAnywayLink = document.createElement('a');
+                openAnywayLink.textContent = "Open anyway";
+                openAnywayLink.href = "javascript:void(0);"; // Or "#"
+                openAnywayLink.style.display = 'block'; // Make it appear on a new line
+                openAnywayLink.style.marginTop = '10px'; // Add some space
+                
+                openAnywayLink.addEventListener('click', function() {
+                    messageBox.style.display = 'none';
+                    if (canvas) {
+                        canvas.style.display = 'block'; // Show canvas
+                    }
+                    startGame(); // Call the new startGame function
+                });
+                
+                // Append a line break then the link to the messageBox
+                const br = document.createElement('br');
+                messageBox.appendChild(br);
+                messageBox.appendChild(openAnywayLink);
+                
                 messageBox.style.display = 'block';
-                if (canvas) { // Check if canvas element exists, though it should
+                if (canvas) {
                     canvas.style.display = 'none';
                 }
-                return; // Stop further execution of init()
+                return; // Still return early to prevent double initialization if not clicking the link
             }
 
-            // Existing init() code follows...
-            missile.reset(); 
-            spawnBuildings(); // MODIFIED: Spawn buildings at start
-            bomberSpawnTimer = BOMBER_SPAWN_INTERVAL / 2; 
-            population = INITIAL_POPULATION; 
-            gameOver = false; 
-            showMessage("Game Ready! Defend the city!", 3000);
-            if (canvas) { // Ensure canvas exists before trying to focus
-                canvas.focus(); 
-            }
-            gameLoop();
+            // Call startGame for desktop users
+            startGame();
         }
 
         window.onload = init;

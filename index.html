@@ -29,6 +29,7 @@
 <body>
     <canvas id="gameCanvas" tabindex="0"></canvas>
     <div id="messageBox" class="message-box"></div>
+    <audio id="missileBoostSound" src="missile_boost.wav" preload="auto"></audio>
 
     <script>
         // Get canvas and context
@@ -37,6 +38,7 @@
 
         // DOM Element for messages
         const messageBox = document.getElementById('messageBox');
+        const missileBoostSound = document.getElementById('missileBoostSound');
 
         // Game constants
         const CANVAS_WIDTH = 800;
@@ -227,9 +229,73 @@
         const missile = { /* ... (same as previous version, with IDLE state) ... */ };
         missile.x=0;missile.y=0;missile.vx=0;missile.vy=0;missile.radius=MISSILE_RADIUS;missile.state=MissileState.IDLE;missile.angle=0;missile.explosionProgress=0;missile.currentExplosionRadius=0;missile.shockwaveRadius=0;missile.shockwaveMaxRadius=MAX_EXPLOSION_RADIUS*SHOCKWAVE_MAX_RADIUS_MULTIPLIER;missile.shockwaveExpansionRate=(MAX_EXPLOSION_RADIUS/EXPLOSION_DURATION_FRAMES)/SHOCKWAVE_SPEED_DIVISOR;
         missile.launch = function(launchAngle, startPos) {if (this.state === MissileState.IDLE) {this.state = MissileState.LAUNCH_PRESSED; this.angle = launchAngle; this.x = startPos.x; this.y = startPos.y;this.vx = Math.cos(this.angle) * INITIAL_LAUNCH_SPEED; this.vy = Math.sin(this.angle) * INITIAL_LAUNCH_SPEED;this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; createLaunchPuff(this.x, this.y, this.angle); showMessage("Missile Launched! Hold 'C' to accelerate.", 2000);}};
-        missile.triggerExplosion = function() {if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {this.state = MissileState.EXPLODING; this.vx = 0; this.vy = 0;this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; screenFlashTimer = SCREEN_FLASH_DURATION; showMessage("KABOOM!", 1500);}};
-        missile.reset = function() {this.state = MissileState.IDLE; const tip = base.getLauncherTip(); this.x = tip.x; this.y = tip.y; this.vx = 0; this.vy = 0;this.angle = base.launcherAngle; this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; };
-        missile.update = function() {if (this.state === MissileState.LAUNCH_PRESSED) {if (!keysPressed['c']) {this.state = MissileState.FLYING_FREE;showMessage("Missile coasting.", 1000);} else {const thrustAx = Math.cos(this.angle) * LAUNCH_ACCEL; const thrustAy = Math.sin(this.angle) * LAUNCH_ACCEL;this.vx += thrustAx; this.vy += thrustAy;}createTrailSmokeParticle(this.x, this.y); } else if (this.state === MissileState.FLYING_FREE) {this.vy += GRAVITY;} else if (this.state === MissileState.EXPLODING) {this.explosionProgress++; if (this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const fieryProgress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;this.currentExplosionRadius = fieryProgress * MAX_EXPLOSION_RADIUS;} else {this.currentExplosionRadius = (this.explosionProgress === EXPLOSION_DURATION_FRAMES) ? MAX_EXPLOSION_RADIUS : 0;}if (this.shockwaveRadius < this.shockwaveMaxRadius) {this.shockwaveRadius += this.shockwaveExpansionRate;}this.shockwaveRadius = Math.min(this.shockwaveRadius, this.shockwaveMaxRadius);if (this.explosionProgress <= EXPLOSION_DURATION_FRAMES && this.currentExplosionRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i];if (checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, bomber)) {createEnemyDestructionPuff(bomber.x, bomber.y);bombers.splice(i, 1); continue; }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.currentExplosionRadius + bomb.radius) * (this.currentExplosionRadius + bomb.radius)) {createEnemyDestructionPuff(bomb.x, bomb.y);bombs.splice(i, 1); continue; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 50; if (bld.health < 0) bld.health = 0;}}}if (this.shockwaveRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i]; if (!bomber.isCrashing && checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, bomber)) {bomber.isCrashing = true;bomber.vx = (Math.random() - 0.5) * BOMBER_SPEED * 0.3; bomber.vy = 0.1; bomber.rotation = 0;bomber.rotationSpeed = (Math.random() - 0.5) * 0.15 + 0.03 * (bomber.vx > 0 ? 1 : -1); }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (!bomb.isDisabledByShockwave && distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.shockwaveRadius + bomb.radius) * (this.shockwaveRadius + bomb.radius)) {bomb.isDisabledByShockwave = true; bomb.parachuteTattered = true; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 25; if (bld.health < 0) bld.health = 0;}}}if (this.explosionProgress >= EXPLOSION_DURATION_FRAMES && this.shockwaveRadius >= this.shockwaveMaxRadius) {this.reset(); }}if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {this.x += this.vx;this.y += this.vy;}if (this.state !== MissileState.EXPLODING && (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius || this.y > CANVAS_HEIGHT + this.radius || this.y < -CANVAS_HEIGHT)) { if (this.state !== MissileState.IDLE) { showMessage("Missile lost.", 1500); this.reset(); }}};
+        missile.triggerExplosion = function() {
+            if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {
+                this.state = MissileState.EXPLODING; 
+                this.vx = 0; this.vy = 0;
+                this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; 
+                screenFlashTimer = SCREEN_FLASH_DURATION; 
+                showMessage("KABOOM!", 1500);
+                // Ensure sound is stopped when exploding
+                if (missileBoostSound && !missileBoostSound.paused) {
+                    missileBoostSound.pause();
+                    missileBoostSound.currentTime = 0;
+                    missileBoostSound.loop = false;
+                }
+            }
+        };
+        missile.reset = function() {
+            this.state = MissileState.IDLE; 
+            const tip = base.getLauncherTip(); 
+            this.x = tip.x; this.y = tip.y; this.vx = 0; this.vy = 0;
+            this.angle = base.launcherAngle; 
+            this.explosionProgress = 0; this.currentExplosionRadius = 0;this.shockwaveRadius = 0; 
+            // Ensure sound is stopped and reset when missile is reset
+            if (missileBoostSound && !missileBoostSound.paused) {
+                missileBoostSound.pause();
+                missileBoostSound.currentTime = 0;
+                missileBoostSound.loop = false;
+            }
+        };
+        missile.update = function() {
+            if (this.state === MissileState.LAUNCH_PRESSED) {
+                if (keysPressed['c']) {
+                    const thrustAx = Math.cos(this.angle) * LAUNCH_ACCEL;
+                    const thrustAy = Math.sin(this.angle) * LAUNCH_ACCEL;
+                    this.vx += thrustAx;
+                    this.vy += thrustAy;
+                    if (missileBoostSound.paused) {
+                        missileBoostSound.play();
+                    }
+                    missileBoostSound.loop = true;
+                } else { // 'c' key released
+                    missileBoostSound.pause();
+                    if (missileBoostSound.currentTime > 0) { // Only reset if it actually played
+                         missileBoostSound.currentTime = 0;
+                    }
+                    missileBoostSound.loop = false;
+                    this.state = MissileState.FLYING_FREE;
+                    showMessage("Missile coasting. Gravity active.", 2000); 
+                }
+                createTrailSmokeParticle(this.x, this.y); 
+            } else if (this.state === MissileState.FLYING_FREE) {
+                // Stop the sound if it was somehow still playing and we are in FLYING_FREE
+                if (!missileBoostSound.paused) {
+                    missileBoostSound.pause();
+                    if (missileBoostSound.currentTime > 0) {
+                        missileBoostSound.currentTime = 0;
+                    }
+                    missileBoostSound.loop = false;
+                }
+                this.vy += GRAVITY;
+            } else if (this.state === MissileState.EXPLODING) {
+                // Ensure sound is stopped if exploding
+                if (!missileBoostSound.paused) {
+                    missileBoostSound.pause();
+                    missileBoostSound.currentTime = 0;
+                    missileBoostSound.loop = false;
+                }
+                this.explosionProgress++; if (this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const fieryProgress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;this.currentExplosionRadius = fieryProgress * MAX_EXPLOSION_RADIUS;} else {this.currentExplosionRadius = (this.explosionProgress === EXPLOSION_DURATION_FRAMES) ? MAX_EXPLOSION_RADIUS : 0;}if (this.shockwaveRadius < this.shockwaveMaxRadius) {this.shockwaveRadius += this.shockwaveExpansionRate;}this.shockwaveRadius = Math.min(this.shockwaveRadius, this.shockwaveMaxRadius);if (this.explosionProgress <= EXPLOSION_DURATION_FRAMES && this.currentExplosionRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i];if (checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, bomber)) {createEnemyDestructionPuff(bomber.x, bomber.y);bombers.splice(i, 1); continue; }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.currentExplosionRadius + bomb.radius) * (this.currentExplosionRadius + bomb.radius)) {createEnemyDestructionPuff(bomb.x, bomb.y);bombs.splice(i, 1); continue; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.currentExplosionRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 50; if (bld.health < 0) bld.health = 0;}}}if (this.shockwaveRadius > 0) {for (let i = bombers.length - 1; i >= 0; i--) {const bomber = bombers[i]; if (!bomber.isCrashing && checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, bomber)) {bomber.isCrashing = true;bomber.vx = (Math.random() - 0.5) * BOMBER_SPEED * 0.3; bomber.vy = 0.1; bomber.rotation = 0;bomber.rotationSpeed = (Math.random() - 0.5) * 0.15 + 0.03 * (bomber.vx > 0 ? 1 : -1); }}for (let i = bombs.length - 1; i >= 0; i--) {const bomb = bombs[i];if (!bomb.isDisabledByShockwave && distanceSquared(this.x, this.y, bomb.x, bomb.y) < (this.shockwaveRadius + bomb.radius) * (this.shockwaveRadius + bomb.radius)) {bomb.isDisabledByShockwave = true; bomb.parachuteTattered = true; }} for(let i = buildings.length - 1; i >= 0; i--) { const bld = buildings[i]; if(checkCollisionCircleRect({x: this.x, y: this.y, radius: this.shockwaveRadius}, {x: bld.x, y: bld.y, width: bld.width, height: bld.height})) { bld.health -= 25; if (bld.health < 0) bld.health = 0;}}}if (this.explosionProgress >= EXPLOSION_DURATION_FRAMES && this.shockwaveRadius >= this.shockwaveMaxRadius) {this.reset(); }}if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {this.x += this.vx;this.y += this.vy;}if (this.state !== MissileState.EXPLODING && (this.x < -this.radius || this.x > CANVAS_WIDTH + this.radius || this.y > CANVAS_HEIGHT + this.radius || this.y < -CANVAS_HEIGHT)) { if (this.state !== MissileState.IDLE) { showMessage("Missile lost.", 1500); this.reset(); }}};
         missile.draw = function() { if (this.state === MissileState.EXPLODING && this.explosionProgress < EXPLOSION_DURATION_FRAMES) {const progress = this.explosionProgress / EXPLOSION_DURATION_FRAMES;const fieryRadius = progress * MAX_EXPLOSION_RADIUS; const alpha = 1 - progress; ctx.beginPath(); ctx.arc(this.x, this.y, fieryRadius, 0, Math.PI * 2);ctx.fillStyle = `rgba(230, 126, 34, ${alpha * 0.8})`; ctx.fill();ctx.beginPath(); ctx.arc(this.x, this.y, fieryRadius * 0.6, 0, Math.PI * 2);ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`; ctx.fill();}if (this.state === MissileState.EXPLODING && this.shockwaveRadius > 0 && this.shockwaveRadius <= this.shockwaveMaxRadius) {const shockwaveAlpha = 0.4 * (1 - (this.shockwaveRadius / this.shockwaveMaxRadius)); ctx.strokeStyle = `rgba(220, 220, 255, ${shockwaveAlpha})`;ctx.lineWidth = 2 + 3 * (this.shockwaveRadius / this.shockwaveMaxRadius) ; if(this.shockwaveRadius > this.shockwaveMaxRadius / 2) { ctx.lineWidth = 2 + 3 * (1 - (this.shockwaveRadius / this.shockwaveMaxRadius));}ctx.beginPath();ctx.arc(this.x, this.y, this.shockwaveRadius, 0, Math.PI * 2);ctx.stroke();ctx.lineWidth = 1; }if (this.state === MissileState.LAUNCH_PRESSED || this.state === MissileState.FLYING_FREE) {ctx.save(); ctx.translate(this.x, this.y);let flightAngle = (this.vx === 0 && this.vy === 0) ? this.angle : Math.atan2(this.vy, this.vx);ctx.rotate(flightAngle);ctx.fillStyle = this.state === MissileState.LAUNCH_PRESSED ? MISSILE_LAUNCHING_COLOR : MISSILE_COLOR;ctx.beginPath(); ctx.ellipse(0, 0, this.radius * 1.5, this.radius * 0.8, 0, -Math.PI/2, Math.PI/2);ctx.lineTo(-this.radius * 0.5, 0); ctx.closePath(); ctx.fill();if (this.state === MissileState.LAUNCH_PRESSED) {ctx.fillStyle = EXPLOSION_COLOR; ctx.beginPath();ctx.moveTo(-this.radius * 1.5, 0);ctx.lineTo(-this.radius * 2.5 - (Math.random()*this.radius), this.radius * 0.5);ctx.lineTo(-this.radius * 2.5 - (Math.random()*this.radius), -this.radius * 0.5);ctx.closePath(); ctx.fill();}ctx.restore();} else if (this.state === MissileState.IDLE) { const tip = base.getLauncherTip();ctx.save(); ctx.translate(tip.x, tip.y);ctx.rotate(base.launcherAngle); ctx.fillStyle = MISSILE_COLOR;ctx.beginPath(); ctx.ellipse(0, 0, this.radius * 1.5, this.radius * 0.8, 0, -Math.PI/2, Math.PI/2);ctx.lineTo(-this.radius * 0.5, 0); ctx.closePath(); ctx.fill(); ctx.restore();}};
 
 
